@@ -1,0 +1,52 @@
+services:
+
+  postgres:
+    image: postgres:16
+
+    container_name: voting-postgres
+
+    environment:
+      POSTGRES_USER: voting_user
+      POSTGRES_PASSWORD: voting_password
+      POSTGRES_DB: voting_db
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+
+    container_name: voting-backend
+
+    env_file:
+      - ./backend/.env
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - ./backend:/app
+
+    depends_on:
+      - postgres
+
+  prometheus:
+    image: prom/prometheus
+
+    container_name: voting-prometheus
+
+    ports:
+      - "9090:9090"
+
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
