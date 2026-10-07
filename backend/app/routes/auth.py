@@ -1,13 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from fastapi.security import OAuth2PasswordRequestForm
 
 from app.db.dependencies import get_db
 from app.models.user import User
 from app.schemas.user import UserCreate, UserResponse
 from app.core.security import hash_password
+
 from app.schemas.token import (
     LoginRequest,
     Token
+)
+from app.core.metrics import (
+    users_registered_total,
+    login_success_total,
+    login_failed_total,
 )
 
 from app.core.jwt import create_access_token
@@ -33,17 +40,30 @@ def register_user(
     db: Session = Depends(get_db)
 ):
 
-    existing_user = (
+    existing_email = (
         db.query(User)
         .filter(User.email == user.email)
         .first()
     )
 
-    if existing_user:
+    if existing_email:
         raise HTTPException(
             status_code=400,
             detail="Email already registered"
         )
+
+    existing_username = (
+        db.query(User)
+        .filter(User.username == user.username)
+        .first()
+    )
+
+    if existing_username:
+        raise HTTPException(
+            status_code=400,
+            detail="Username already taken"
+        )
+
     db_user = User(
         username=user.username,
         email=user.email,
@@ -52,9 +72,11 @@ def register_user(
         )
     )
 
+
     db.add(db_user)
 
     db.commit()
+    users_registered_total.inc()
 
     db.refresh(db_user)
 
@@ -65,19 +87,20 @@ def register_user(
     response_model=Token
 )
 def login(
-    credentials: LoginRequest,
+    credentials: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
 
     user = (
         db.query(User)
         .filter(
-            User.email == credentials.email
+            User.email == credentials.username
         )
         .first()
     )
 
     if not user:
+        login_failed_total.inc()
         raise HTTPException(
             status_code=401,
             detail="Invalid credentials"
@@ -87,6 +110,7 @@ def login(
         credentials.password,
         user.password_hash
     ):
+        login_failed_total.inc()
         raise HTTPException(
             status_code=401,
             detail="Invalid credentials"
@@ -97,6 +121,8 @@ def login(
             "sub": str(user.id)
         }
     )
+
+    login_success_total.inc()
 
     return {
         "access_token": access_token,

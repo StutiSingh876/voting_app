@@ -16,3 +16,6 @@ python-multipart
 email-validator
 
 prometheus-fastapi-instrumentator
+
+pytest
+httpx
