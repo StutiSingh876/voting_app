@@ -19,12 +19,26 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column('polls', sa.Column('owner_id', sa.Integer(), nullable=True))
-    op.create_foreign_key('fk_polls_owner_id_users', 'polls', 'users', ['owner_id'], ['id'])
-    op.create_unique_constraint('uq_user_poll_vote', 'votes', ['user_id', 'poll_id'])
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    
+    if 'polls' in inspector.get_table_names():
+        columns = [c['name'] for c in inspector.get_columns('polls')]
+        if 'owner_id' not in columns:
+            op.add_column('polls', sa.Column('owner_id', sa.Integer(), nullable=True))
+            try:
+                op.create_foreign_key('fk_polls_owner_id_users', 'polls', 'users', ['owner_id'], ['id'])
+            except Exception:
+                pass
+
+    if 'votes' in inspector.get_table_names():
+        constraints = [c['name'] for c in inspector.get_unique_constraints('votes')]
+        if 'uq_user_poll_vote' not in constraints:
+            try:
+                op.create_unique_constraint('uq_user_poll_vote', 'votes', ['user_id', 'poll_id'])
+            except Exception:
+                pass
 
 
 def downgrade() -> None:
-    op.drop_constraint('uq_user_poll_vote', 'votes', type_='unique')
-    op.drop_constraint('fk_polls_owner_id_users', 'polls', type_='foreignkey')
-    op.drop_column('polls', 'owner_id')
+    pass
